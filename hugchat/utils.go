@@ -1,4 +1,4 @@
-package hugging_chat_go
+package hugchat
 
 import (
 	"bufio"

@@ -1,3 +1,3 @@
-module github.com/Mr-Destructive/hugging-chat-go
+module github.com/mr-destructive/hugging-chat-go
 
 go 1.18

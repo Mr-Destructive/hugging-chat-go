@@ -8,13 +8,13 @@ import (
 )
 
 func main() {
-	err := hugging_chat_go.LoadEnvFromFile(".env")
+	err := hugchat.LoadEnvFromFile(".env")
 	cookies_map := map[string]string{"hf-chat": os.Getenv("hf-chat")}
 	var inp string
 	fmt.Println("Enter the prompt: ")
 	fmt.Scanln(&inp)
 	fmt.Println(inp)
-	bot, err := hugging_chat_go.NewChatBot(cookies_map, "")
+	bot, err := hugchat.NewChatBot(cookies_map, "")
 	if err != nil {
 		fmt.Println(err)
 	}
