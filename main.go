@@ -4,17 +4,17 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Mr-Destructive/huggingchat-go/hugchat"
+	"github.com/Mr-Destructive/hugging-chat-go/hugchat"
 )
 
 func main() {
-	err := huggingchat_go.LoadEnvFromFile(".env")
+	err := hugging_chat_go.LoadEnvFromFile(".env")
 	cookies_map := map[string]string{"hf-chat": os.Getenv("hf-chat")}
 	var inp string
 	fmt.Println("Enter the prompt: ")
 	fmt.Scanln(&inp)
 	fmt.Println(inp)
-	bot, err := huggingchat_go.NewChatBot(cookies_map, "")
+	bot, err := hugging_chat_go.NewChatBot(cookies_map, "")
 	if err != nil {
 		fmt.Println(err)
 	}

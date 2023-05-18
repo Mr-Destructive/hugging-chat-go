@@ -1,4 +1,4 @@
-package huggingchat_go
+package hugging_chat_go
 
 import (
 	"bytes"
