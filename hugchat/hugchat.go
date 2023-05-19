@@ -16,9 +16,9 @@ import (
 
 func NewChatBot(cookies map[string]string, cookiePath string) (*ChatBot, error) {
 	if cookies == nil && cookiePath == "" {
-		return nil, errors.New("Authentication is required now, but no cookies provided")
+		return nil, errors.New("authentication is required now, but no cookies provided")
 	} else if cookies != nil && cookiePath != "" {
-		return nil, errors.New("Both cookies and cookie_path provided")
+		return nil, errors.New("both cookies and cookie_path provided")
 	}
 
 	if cookies == nil && cookiePath != "" {
@@ -32,14 +32,16 @@ func NewChatBot(cookies map[string]string, cookiePath string) (*ChatBot, error) 
 		}
 	}
 
-	baseUrl, err := url.Parse("https://huggingface.co")
-	HandleError(err)
-	cookies_obj := makeCookies(cookies)
+	baseURL, err := url.Parse("https://huggingface.co")
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse base URL: %w", err)
+	}
+	cookiesObj := makeCookies(cookies)
 
 	cb := &ChatBot{
-		Cookies:              cookies_obj,
+		Cookies:              cookiesObj,
 		Session:              &http.Client{},
-		HFBaseURL:            baseUrl,
+		HFBaseURL:            baseURL,
 		JSONHeader:           http.Header{"Content-Type": []string{"application/json"}},
 		ConversationIDList:   []string{},
 		ActiveModel:          "OpenAssistant/oasst-sft-6-llama-30b-xor",
@@ -50,7 +52,9 @@ func NewChatBot(cookies map[string]string, cookiePath string) (*ChatBot, error) 
 	cb.AcceptEthicsModal()
 	cb.setHCSession()
 	cb.CurrentConversation, err = cb.NewConversation()
-	HandleError(err)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new conversation: %w", err)
+	}
 
 	return cb, nil
 }
@@ -77,11 +81,11 @@ func (c *ChatBot) NewConversation() (string, error) {
 	errCount := 0
 
 	for {
-		url := c.HFBaseURL.String() + "/chat/conversation"
+		url := fmt.Sprintf("%s/chat/conversation", c.HFBaseURL.String())
 		data := fmt.Sprintf(`{"model": "%s"}`, c.ActiveModel)
 		req, err := http.NewRequest("POST", url, strings.NewReader(data))
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("failed to create HTTP request: %w", err)
 		}
 
 		req.Header.Set("Content-Type", "application/json")
@@ -90,7 +94,7 @@ func (c *ChatBot) NewConversation() (string, error) {
 		if err != nil {
 			errCount++
 			if errCount > 5 {
-				return "", err
+				return "", fmt.Errorf("failed to create new conversation: %w", err)
 			}
 			continue
 		}
@@ -98,13 +102,13 @@ func (c *ChatBot) NewConversation() (string, error) {
 
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("failed to read response body: %w", err)
 		}
 
 		if resp.StatusCode != http.StatusOK {
 			errCount++
 			if errCount > 5 {
-				return "", fmt.Errorf("Failed to create new conversation with status code %d", resp.StatusCode)
+				return "", fmt.Errorf("failed to create new conversation with status code %d", resp.StatusCode)
 			}
 			continue
 		}
@@ -114,7 +118,7 @@ func (c *ChatBot) NewConversation() (string, error) {
 		}
 		err = json.Unmarshal(body, &response)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("failed to unmarshal response body: %w", err)
 		}
 
 		c.ConversationIDList = append(c.ConversationIDList, response.ConversationID)
@@ -181,11 +185,13 @@ func (c *ChatBot) Chat(
 	retryCount int,
 ) (string, error) {
 	if retryCount <= 0 {
-		return "", errors.New("the parameter retryCount must be greater than 0")
+		return "", errors.New("retryCount must be greater than 0")
 	}
-	conversationId, err := GenerateUUID()
-	fmt.Println(conversationId)
-	HandleError(err)
+
+	conversationID, err := GenerateUUID()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate conversation ID: %w", err)
+	}
 
 	req := ChatRequest{
 		Inputs: text,
@@ -204,31 +210,28 @@ func (c *ChatBot) Chat(
 		Options: ChatOptions{
 			UseCache: useCache,
 			IsRetry:  isRetry,
-			ID:       conversationId,
+			ID:       conversationID,
 		},
 	}
 
-	url := c.HFBaseURL.String() + fmt.Sprintf("/chat/conversation/%s", c.CurrentConversation)
+	url := fmt.Sprintf("%s/chat/conversation/%s", c.HFBaseURL.String(), c.CurrentConversation)
 	reqData, err := json.Marshal(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to marshal request data: %w", err)
 	}
-
-	//headers := c.getHeaders(true)
 
 	for retryCount > 0 {
 		req, err := http.NewRequest("POST", url, bytes.NewBuffer(reqData))
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("failed to create HTTP request: %w", err)
 		}
 		req.Header.Set("Content-Type", "application/json")
-		//req.Header.Set("Cookie", c.Cookies)
 
 		resp, err := c.Session.Do(req)
 		if err != nil {
 			retryCount--
 			if retryCount <= 0 {
-				return "", fmt.Errorf("Failed to chat. (%d) REASON (%s)", resp.StatusCode, resp.Body)
+				return "", fmt.Errorf("failed to send HTTP request: %w", err)
 			}
 			continue
 		}
@@ -236,13 +239,13 @@ func (c *ChatBot) Chat(
 
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("failed to read response body: %w", err)
 		}
 
 		if resp.StatusCode != http.StatusOK {
 			retryCount--
 			if retryCount <= 0 {
-				return "", fmt.Errorf("Failed to chat. (%d) REASON (%s)", resp.StatusCode, body)
+				return "", fmt.Errorf("chat request failed with status code %d: %s", resp.StatusCode, body)
 			}
 			continue
 		}
@@ -250,18 +253,18 @@ func (c *ChatBot) Chat(
 		var response []ChatResponse
 		err = json.Unmarshal(body, &response)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("failed to unmarshal response body: %w", err)
 		}
 
 		if len(response) > 0 {
 			for _, chatResp := range response {
 				if chatResp.Error != "" {
-					return "", fmt.Errorf("Chat error: %s", chatResp.Error)
+					return "", fmt.Errorf("chat error: %s", chatResp.Error)
 				}
 			}
 			return response[0].GeneratedText, nil
 		}
 	}
 
-	return "", errors.New("Failed to chat")
+	return "", errors.New("chat request failed")
 }

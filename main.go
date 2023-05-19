@@ -1,18 +1,20 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 
-	"github.com/Mr-Destructive/hugging-chat-go/hugchat"
+	"github.com/mr-destructive/hugging-chat-go/hugchat"
 )
 
 func main() {
 	err := hugchat.LoadEnvFromFile(".env")
 	cookies_map := map[string]string{"hf-chat": os.Getenv("hf-chat")}
 	var inp string
-	fmt.Println("Enter the prompt: ")
-	fmt.Scanln(&inp)
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Println("Enter the prompt:")
+	inp, _ = reader.ReadString('\n')
 	fmt.Println(inp)
 	bot, err := hugchat.NewChatBot(cookies_map, "")
 	if err != nil {
