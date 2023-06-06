@@ -10,13 +10,14 @@ import (
 
 func main() {
 	err := hugchat.LoadEnvFromFile(".env")
-	cookies_map := map[string]string{"hf-chat": os.Getenv("hf-chat")}
+	//cookies_map := map[string]string{"hf-chat": os.Getenv("hf-chat")}
+	email := os.Getenv("email")
+	password := os.Getenv("password")
 	var inp string
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("Enter the prompt:")
 	inp, _ = reader.ReadString('\n')
-	fmt.Println(inp)
-	bot, err := hugchat.NewChatBot(cookies_map, "")
+	bot, err := hugchat.NewChatBot(email, password)
 	if err != nil {
 		fmt.Println(err)
 	}

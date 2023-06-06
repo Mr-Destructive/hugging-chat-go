@@ -6,6 +6,8 @@ import (
 )
 
 type ChatBot struct {
+	Username             string
+	Password             string
 	Cookies              []*http.Cookie
 	Session              *http.Client
 	HFBaseURL            *url.URL

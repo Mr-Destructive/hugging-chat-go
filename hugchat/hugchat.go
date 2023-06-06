@@ -7,40 +7,24 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"strings"
 	"time"
-
-	"net/http/cookiejar"
 )
 
-func NewChatBot(cookies map[string]string, cookiePath string) (*ChatBot, error) {
-	if cookies == nil && cookiePath == "" {
-		return nil, errors.New("authentication is required now, but no cookies provided")
-	} else if cookies != nil && cookiePath != "" {
-		return nil, errors.New("both cookies and cookie_path provided")
-	}
-
-	if cookies == nil && cookiePath != "" {
-		cookiesData, err := ioutil.ReadFile(cookiePath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read cookies file: %w", err)
-		}
-
-		if err := json.Unmarshal(cookiesData, &cookies); err != nil {
-			return nil, fmt.Errorf("failed to parse cookies data: %w", err)
-		}
+func NewChatBot(username, password string) (*ChatBot, error) {
+	if username == "" || password == "" {
+		return nil, errors.New("username and password are required")
 	}
 
 	baseURL, err := url.Parse("https://huggingface.co")
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse base URL: %w", err)
 	}
-	cookiesObj := makeCookies(cookies)
 
-	cb := &ChatBot{
-		Cookies:              cookiesObj,
-		Session:              &http.Client{},
+	cb := ChatBot{
+		Session:              &http.Client{Timeout: time.Second * 10},
 		HFBaseURL:            baseURL,
 		JSONHeader:           http.Header{"Content-Type": []string{"application/json"}},
 		ConversationIDList:   []string{},
@@ -49,21 +33,46 @@ func NewChatBot(cookies map[string]string, cookiePath string) (*ChatBot, error) 
 		CurrentConversation:  "",
 	}
 
+	login := NewLogin(username, password, "usercookies.json")
+	if err := login.Login(); err != nil {
+		fmt.Println("Login failed:", err)
+		return nil, err
+	}
+
+	if err := login.SaveCookies(); err != nil {
+		fmt.Println("Failed to save cookies:", err)
+		return nil, err
+	}
+	cb.Cookies = login.Cookies
 	cb.AcceptEthicsModal()
-	cb.setHCSession()
+	err = cb.setHCSession()
+	if err != nil {
+		return nil, fmt.Errorf("failed to set HC session: %w", err)
+	}
+
 	cb.CurrentConversation, err = cb.NewConversation()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new conversation: %w", err)
 	}
 
-	return cb, nil
+	return &cb, nil
 }
 
-func (cb *ChatBot) setHCSession() {
-	jar, _ := cookiejar.New(nil)
+func (cb *ChatBot) setHCSession() error {
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		return fmt.Errorf("failed to create cookie jar: %w", err)
+	}
+
+	//cb.Session.Jar = jar
 	cb.Session = &http.Client{Timeout: time.Second * 10, Jar: jar}
 	cb.Session.Jar.SetCookies(cb.HFBaseURL, cb.Cookies)
 	cb.Session.Get(cb.HFBaseURL.String() + "/")
+
+	//baseURL := cb.HFBaseURL.String() + "/"
+	//cb.Session.Get(baseURL)
+
+	return nil
 }
 
 func makeCookies(cookies map[string]string) []*http.Cookie {
@@ -80,50 +89,46 @@ func makeCookies(cookies map[string]string) []*http.Cookie {
 func (c *ChatBot) NewConversation() (string, error) {
 	errCount := 0
 
-	for {
-		url := fmt.Sprintf("%s/chat/conversation", c.HFBaseURL.String())
-		data := fmt.Sprintf(`{"model": "%s"}`, c.ActiveModel)
-		req, err := http.NewRequest("POST", url, strings.NewReader(data))
-		if err != nil {
-			return "", fmt.Errorf("failed to create HTTP request: %w", err)
-		}
-
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err := c.Session.Do(req)
-		if err != nil {
-			errCount++
-			if errCount > 5 {
-				return "", fmt.Errorf("failed to create new conversation: %w", err)
-			}
-			continue
-		}
-		defer resp.Body.Close()
-
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return "", fmt.Errorf("failed to read response body: %w", err)
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			errCount++
-			if errCount > 5 {
-				return "", fmt.Errorf("failed to create new conversation with status code %d", resp.StatusCode)
-			}
-			continue
-		}
-
-		var response struct {
-			ConversationID string `json:"conversationId"`
-		}
-		err = json.Unmarshal(body, &response)
-		if err != nil {
-			return "", fmt.Errorf("failed to unmarshal response body: %w", err)
-		}
-
-		c.ConversationIDList = append(c.ConversationIDList, response.ConversationID)
-		return response.ConversationID, nil
+	url := fmt.Sprintf("%s/chat/conversation", c.HFBaseURL.String())
+	data := fmt.Sprintf(`{"model": "%s"}`, c.ActiveModel)
+	req, err := http.NewRequest("POST", url, strings.NewReader(data))
+	if err != nil {
+		return "", fmt.Errorf("failed to create HTTP request: %w", err)
 	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.Session.Do(req)
+	if err != nil {
+		errCount++
+		if errCount > 5 {
+			return "", fmt.Errorf("failed to create new conversation: %w", err)
+		}
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		errCount++
+		if errCount > 5 {
+			return "", fmt.Errorf("failed to create new conversation with status code %d", resp.StatusCode)
+		}
+	}
+
+	var response struct {
+		ConversationID string `json:"conversationId"`
+	}
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		return "", fmt.Errorf("failed to unmarshal response body: %w", err)
+	}
+
+	c.ConversationIDList = append(c.ConversationIDList, response.ConversationID)
+	return response.ConversationID, nil
 }
 
 func (c *ChatBot) AcceptEthicsModal() error {
@@ -155,7 +160,7 @@ func (c *ChatBot) AcceptEthicsModal() error {
 
 func (c *ChatBot) getHeaders(ref bool) http.Header {
 	headers := make(http.Header)
-	headers.Set("Host", "api.huggingface.co")
+	headers.Set("Host", "api.huggingface.com")
 	headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.93 Safari/537.36")
 	headers.Set("Accept", "application/json")
 	headers.Set("Accept-Language", "en-US,en;q=0.9")
