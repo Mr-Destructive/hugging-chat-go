@@ -27,7 +27,7 @@ func NewLogin(email, passwd, cookiePath string) *Login {
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{
 		Jar:     jar,
-		Timeout: time.Second * 10,
+		Timeout: time.Second * 20,
 	}
 	return &Login{
 		Email:      email,
