@@ -70,3 +70,36 @@ func main() {
 }
 ```
 
+OR 
+
+```go
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+
+	"github.com/mr-destructive/hugging-chat-go/hugchat"
+)
+
+func main() {
+
+    err := hugchat.LoadEnvFromFile(".env")
+
+	email := os.Getenv("email")
+	password := os.Getenv("password")
+    text = "What is universe?"
+
+	bot, err := hugchat.NewChatBot(email, password)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	response, err := bot.ChatPrompt(text)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+	fmt.Println(response)
+```

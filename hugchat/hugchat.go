@@ -273,3 +273,23 @@ func (c *ChatBot) Chat(
 
 	return "", errors.New("chat request failed")
 }
+
+func (c *ChatBot) ChatPrompt(
+	text string,
+) (string, error) {
+	temperature := 0.5
+	topP := 0.95
+	repetitionPenalty := 1.2
+	topK := 50
+	truncate := 1024
+	watermark := false
+	maxNewTokens := 1024
+	stop := []string{"</s>"}
+	returnFullText := false
+	stream := true
+	useCache := false
+	isRetry := false
+	retryCount := 5
+	chat, err := c.Chat(text, temperature, topP, repetitionPenalty, topK, truncate, watermark, maxNewTokens, stop, returnFullText, stream, useCache, isRetry, retryCount)
+	return chat, err
+}
